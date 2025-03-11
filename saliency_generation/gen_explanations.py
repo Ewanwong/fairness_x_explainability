@@ -1,5 +1,5 @@
-from saliency_utils.Explainer import BcosExplainer, AttentionExplainer, GradientNPropabationExplainer, OcclusionExplainer, ShapleyValueExplainer, LimeExplainer
-from saliency_utils.utils import set_random_seed, split_dataset, apply_dataset_perturbation
+from utils.Explainer import BcosExplainer, AttentionExplainer, GradientNPropabationExplainer, OcclusionExplainer, ShapleyValueExplainer, LimeExplainer
+from utils.utils import set_random_seed, split_dataset, apply_dataset_perturbation
 import argparse
 import torch
 from torch.utils.data import DataLoader, Subset

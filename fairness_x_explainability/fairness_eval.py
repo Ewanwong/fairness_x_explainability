@@ -6,70 +6,8 @@ import json
 import os
 import random
 from tqdm import tqdm
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-
-EXPLANATION_METHODS = ["Bcos",
-                       "Attention",
-                       "Saliency",
-                       "DeepLift",
-                       "GuidedBackprop",
-                       "InputXGradient",
-                       "IntegratedGradients",
-                       "SIG",
-                       "Occlusion",
-                       "KernelShap",
-                       "ShapleyValue",                       
-                       "Lime",
-                       "Decompx",]
-
-
-BIAS_TYPES = {
-    "gender": ["female", "male"],
-    "race": ["black", "white"],
-}
-
-SHOULD_CONTAIN = {"white": ["white", "caucasian", "europe"], 
-                  "black": ["black", "africa"],
-                  "male": [],
-                  "female": []}
-
-SHOULD_NOT_CONTAIN = {"white": [],
-                      "black": ["nigg", "negro", "niger"],
-                      "male": [],
-                      "female": []}
-
-
-# TODO: a better filter function
-def filter_text(text, should_contain, should_not_contain):
-    contain_flag = False
-    for word in should_contain:
-        if word in text.lower():
-            contain_flag = True
-            break
-    if not contain_flag:
-        return False
-    for word in should_not_contain:
-        if word in text.lower():
-            return False
-    return True
-
-# TODO: add support for multi-class error rate
-def compute_metrics(labels, predictions, num_classes=2):
-    accuracy = accuracy_score(labels, predictions)
-    f1 = f1_score(labels, predictions, average='macro')
-    if num_classes == 2:
-        tn, fp, fn, tp = confusion_matrix(labels, predictions, labels=[0, 1]).ravel()
-        tpr = tp / (tp + fn + 1e-12)
-        tnr = tn / (tn + fp + 1e-12)
-        fpr = fp / (fp + tn + 1e-12)
-        fnr = fn / (fn + tp + 1e-12)
-    else:
-        print("Multi-class error rate computations are not supported yet, set to -1 by default")
-        tpr = -1
-        tnr = -1
-        fpr = -1
-        fnr = -1
-    return accuracy, f1, tpr, tnr, fpr, fnr
+from utils.utils import filter_text, compute_metrics
+from utils.utils import BIAS_TYPES, EXPLANATION_METHODS, SHOULD_CONTAIN, SHOULD_NOT_CONTAIN
 
 
 def main(args):
@@ -96,9 +34,7 @@ def main(args):
     all_labels = []
     if len(BIAS_TYPES[args.bias_type]) != 2:
         raise ValueError("Only binary bias types are supported")
-    if args.counterfactual:
-        all_predictions_by_group = {group:[] for group in BIAS_TYPES[args.bias_type]}
-        all_labels_by_group = {group:[] for group in BIAS_TYPES[args.bias_type]}
+
     for group in BIAS_TYPES[args.bias_type]:
         results[group] = {}
         group_explanation_file = os.path.join(args.explanation_dir, f"{method}_{group}_{args.split}_explanations.json")
@@ -113,17 +49,15 @@ def main(args):
         all_orig_labels = [explanations[0]["true_label"] for explanations in orig_explanations]
         all_predictions.extend(all_orig_predictions)
         all_labels.extend(all_orig_labels)
-        all_predictions_by_group[group].extend(all_orig_predictions)
-        all_labels_by_group[group].extend(all_orig_labels)
-        accuracy, f1, tpr, tnr, fpr, fnr = compute_metrics(all_orig_labels, all_orig_predictions, num_classes=args.num_labels)
+        orig_metrics_dict = compute_metrics(all_orig_labels, all_orig_predictions, num_classes=args.num_labels)
         
+        # metrics on the original group-specific data
         results[group]["num_examples"] = len(orig_explanations)
-        results[group]["accuracy"] = accuracy
-        results[group]["f1"] = f1
-        results[group]["tpr"] = tpr
-        results[group]["fpr"] = fpr
-        results[group]["tnr"] = tnr
-        results[group]["fnr"] = fnr
+        results[group]["accuracy"] =  orig_metrics_dict["accuracy"]
+        results[group]["f1"] = orig_metrics_dict["f1"]
+        for i in range(args.num_labels):
+            for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                results[group][f"class_{i}_{metric}"] = orig_metrics_dict[f"class_{i}"][metric]
         results[group]["predictions"] = all_orig_predictions
         results[group]["labels"] = all_orig_labels
 
@@ -131,9 +65,7 @@ def main(args):
             counterfactual_group = BIAS_TYPES[args.bias_type][0] if group == BIAS_TYPES[args.bias_type][1] else BIAS_TYPES[args.bias_type][1]
             all_group_idxs = [explanations[0]["index"] for explanations in orig_explanations]
             all_group_class_confidences = {i: [explanations[i]["target_class_confidence"] for explanations in orig_explanations] for i in range(args.num_labels)}
-            #if args.num_labels == 2:
-            #    all_group_positive_confidence = [explanations[1]["target_class_confidence"] for explanations in orig_explanations]
-            all_group_predicted_class_confidence_ = [explanations[0]["predicted_class_confidence"] for explanations in orig_explanations]
+            all_group_predicted_class_confidences = [explanations[0]["predicted_class_confidence"] for explanations in orig_explanations]
 
             counterfactual_explanation_file = os.path.join(args.explanation_dir, f"{method}_{group}_counterfactual_{args.split}_explanations.json")
             with open(counterfactual_explanation_file) as f:
@@ -145,48 +77,40 @@ def main(args):
             all_counterfactual_group_predictions = [explanations[0]["predicted_class"] for explanations in counterfactual_explanations]
             all_counterfactual_group_labels = [explanations[0]["true_label"] for explanations in counterfactual_explanations]
             counterfactual_group = BIAS_TYPES[args.bias_type][0] if group == BIAS_TYPES[args.bias_type][1] else BIAS_TYPES[args.bias_type][1]
-            all_predictions_by_group[counterfactual_group].extend(all_counterfactual_group_predictions)
-            all_labels_by_group[counterfactual_group].extend(all_counterfactual_group_labels)
-            #all_counterfactual_predictions.extend(all_counterfactual_group_predictions)
-            #all_counterfactual_labels.extend(all_counterfactual_group_labels)
-
-            counterfactual_accuracy, counterfactual_f1, counterfactual_tpr, counterfactual_tnr, counterfactual_fpr, counterfactual_fnr = compute_metrics(all_counterfactual_group_labels, all_counterfactual_group_predictions, num_classes=args.num_labels)
-
-            results[group]["counterfactual_accuracy"] = counterfactual_accuracy
-            results[group]["counterfactual_f1"] = counterfactual_f1
-            results[group]["counterfactual_tpr"] = counterfactual_tpr
-            results[group]["counterfactual_fpr"] = counterfactual_fpr
-            results[group]["counterfactual_tnr"] = counterfactual_tnr
-            results[group]["counterfactual_fnr"] = counterfactual_fnr
             results[group]["counterfactual_predictions"] = all_counterfactual_group_predictions
-            results[group]["counterfactual_labels"] = all_counterfactual_group_labels
-            
-            
+            #results[group]["counterfactual_labels"] = all_counterfactual_group_labels
+
+            # compute metrics on the counterfactual group-specific data
+            counterfactual_metrics_dict = compute_metrics(all_counterfactual_group_labels, all_counterfactual_group_predictions, num_classes=args.num_labels)
+
+            results[group]["counterfactual_accuracy"] = counterfactual_metrics_dict["accuracy"]
+            results[group]["counterfactual_f1"] = counterfactual_metrics_dict["f1"]
+            for i in range(args.num_labels):
+                for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                    results[group][f"counterfactual_class_{i}_{metric}"] = counterfactual_metrics_dict[f"class_{i}"][metric]
+
+            # compute differences between the original and counterfactual group-specific data
+            results[group][f"counterfactual_{group}_to_{counterfactual_group}_accuracy_diff"] = counterfactual_metrics_dict["accuracy"] - orig_metrics_dict["accuracy"]
+            results[group][f"counterfactual_{group}_to_{counterfactual_group}_f1_diff"] = counterfactual_metrics_dict["f1"] - orig_metrics_dict["f1"]
+            for i in range(args.num_labels):
+                for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                    results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{i}_{metric}_diff"] = counterfactual_metrics_dict[f"class_{i}"][metric] - orig_metrics_dict[f"class_{i}"][metric]
+
+            results[group][f"counterfactual_{counterfactual_group}_to_{group}_accuracy_diff"] = orig_metrics_dict["accuracy"] - counterfactual_metrics_dict["accuracy"]
+            results[group][f"counterfactual_{counterfactual_group}_to_{group}_f1_diff"] = orig_metrics_dict["f1"] - counterfactual_metrics_dict["f1"]
+            for i in range(args.num_labels):
+                for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                    results[group][f"counterfactual_{counterfactual_group}_to_{group}_class_{i}_{metric}_diff"] = orig_metrics_dict[f"class_{i}"][metric] - counterfactual_metrics_dict[f"class_{i}"][metric]
+
+            # compute confidence differences for each class 
             all_counterfactual_group_class_confidences = {i: [explanations[i]["target_class_confidence"] for explanations in counterfactual_explanations] for i in range(args.num_labels)}
-            #if args.num_labels == 2:
-            #    all_counterfactual_group_positive_confidence = [explanations[1]["target_class_confidence"] for explanations in counterfactual_explanations]
-            all_counterfactual_group_predicted_class_confidence_ = [explanations[predicted_class]["target_class_confidence"] for explanations, predicted_class in zip(counterfactual_explanations, all_orig_predictions)]
+            all_counterfactual_group_predicted_class_confidences = [explanations[predicted_class]["target_class_confidence"] for explanations, predicted_class in zip(counterfactual_explanations, all_orig_predictions)]
 
-
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_accuracy_diff"] = counterfactual_accuracy - accuracy
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_f1_diff"] = counterfactual_f1 - f1
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_tpr_diff"] = counterfactual_tpr - tpr
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_fpr_diff"] = counterfactual_fpr - fpr
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_tnr_diff"] = counterfactual_tnr - tnr
-            results[group][f"counterfactual_{group}_to_{counterfactual_group}_fnr_diff"] = counterfactual_fnr - fnr
-
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_accuracy_diff"] = accuracy - counterfactual_accuracy
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_f1_diff"] = f1 - counterfactual_f1
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_tpr_diff"] = tpr - counterfactual_tpr
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_fpr_diff"] = fpr - counterfactual_fpr
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_tnr_diff"] = tnr - counterfactual_tnr
-            results[group][f"counterfactual_{counterfactual_group}_to_{group}_fnr_diff"] = fnr - counterfactual_fnr
-            
             results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"] = {}
             for i in range(args.num_labels):
                 results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{i}_confidence_diff"] = {}
             for i in range(len(all_group_idxs)):
-                results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"][all_group_idxs[i]] = all_counterfactual_group_predicted_class_confidence_[i] - all_group_predicted_class_confidence_[i]
+                results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"][all_group_idxs[i]] = all_counterfactual_group_predicted_class_confidences[i] - all_group_predicted_class_confidences[i]
                 for j in range(args.num_labels):
                     results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{j}_confidence_diff"][all_group_idxs[i]] = all_counterfactual_group_class_confidences[j][i] - all_group_class_confidences[j][i]
             
@@ -194,76 +118,77 @@ def main(args):
             for i in range(args.num_labels):
                 results[group][f"counterfactual_{counterfactual_group}_to_{group}_class_{i}_confidence_diff"] = {}
             for i in range(len(all_group_idxs)):
-                results[group][f"counterfactual_{counterfactual_group}_to_{group}_predicted_class_confidence_diff"][all_group_idxs[i]] = all_group_predicted_class_confidence_[i] - all_counterfactual_group_predicted_class_confidence_[i]
+                results[group][f"counterfactual_{counterfactual_group}_to_{group}_predicted_class_confidence_diff"][all_group_idxs[i]] = all_group_predicted_class_confidences[i] - all_counterfactual_group_predicted_class_confidences[i]
                 for j in range(args.num_labels):
                     results[group][f"counterfactual_{counterfactual_group}_to_{group}_class_{j}_confidence_diff"][all_group_idxs[i]] = all_group_class_confidences[j][i] - all_counterfactual_group_class_confidences[j][i]
 
             
             results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff_avg"] = np.mean(list(results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"].values()))
             results[group][f"counterfactual_{counterfactual_group}_to_{group}_predicted_class_confidence_diff_avg"] = np.mean(list(results[group][f"counterfactual_{counterfactual_group}_to_{group}_predicted_class_confidence_diff"].values()))
-            
             results[group]["counterfactual_predicted_class_confidence_diff_avg_abs"] = np.mean(np.abs(list(results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"].values())))
-            #if args.num_labels == 2:
+
             for i in range(args.num_labels):
+                
                 results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{i}_confidence_diff_avg"] = np.mean(list(results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{i}_confidence_diff"].values()))
                 results[group][f"counterfactual_{counterfactual_group}_to_{group}_class_{i}_confidence_diff_avg"] = np.mean(list(results[group][f"counterfactual_{counterfactual_group}_to_{group}_class_{i}_confidence_diff"].values()))
                 results[group][f"counterfactual_class_{i}_confidence_diff_avg_abs"] = np.mean(np.abs(list(results[group][f"counterfactual_{group}_to_{counterfactual_group}_class_{i}_confidence_diff"].values())))
 
-
-    overall_accuracy = accuracy_score(all_labels, all_predictions)
-    overall_f1 = f1_score(all_labels, all_predictions, average='macro')
-    overall_tpr = sum([1 for pred, label in zip(all_predictions, all_labels) if pred==label and pred==1]) / sum([1 for label in all_labels if label==1])
-    overall_fpr = sum([1 for pred, label in zip(all_predictions, all_labels) if pred!=label and pred==1]) / sum([1 for label in all_labels if label==0])
-    overall_tnr = sum([1 for pred, label in zip(all_predictions, all_labels) if pred==label and pred==0]) / sum([1 for label in all_labels if label==0])
-    overall_fnr = sum([1 for pred, label in zip(all_predictions, all_labels) if pred!=label and pred==0]) / sum([1 for label in all_labels if label==1])
+    # compute metrics for both groups
+    overall_metrics_dict = compute_metrics(all_labels, all_predictions, num_classes=args.num_labels)
     
-
-
     results["overall"] = {}
     results["overall"]["num_examples"] = len(all_labels)
-    results["overall"]["accuracy"] = overall_accuracy
-    results["overall"]["f1"] = overall_f1
-    results["overall"]["tpr"] = overall_tpr
-    results["overall"]["fpr"] = overall_fpr
-    results["overall"]["tnr"] = overall_tnr
-    results["overall"]["fnr"] = overall_fnr
+    results["overall"]["accuracy"] = overall_metrics_dict["accuracy"]
+    results["overall"]["f1"] = overall_metrics_dict["f1"]
+    
 
-    for metric in ["accuracy", "f1", "tpr", "fpr", "tnr", "fnr"]:
-        
-        results["overall"][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_{metric}_diff"] = results[BIAS_TYPES[args.bias_type][1]][metric] - results[BIAS_TYPES[args.bias_type][0]][metric]
-        results["overall"][f"{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_{metric}_diff"] = results[BIAS_TYPES[args.bias_type][0]][metric] - results[BIAS_TYPES[args.bias_type][1]][metric]
+    # compute metrics difference in both directions (group fairness)
+    results["overall"][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_accuracy_diff"] = results[BIAS_TYPES[args.bias_type][1]]["accuracy"] - results[BIAS_TYPES[args.bias_type][0]]["accuracy"]
+    results["overall"][f"{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_accuracy_diff"] = results[BIAS_TYPES[args.bias_type][0]]["accuracy"] - results[BIAS_TYPES[args.bias_type][1]]["accuracy"]
+    results["overall"][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_f1_diff"] = results[BIAS_TYPES[args.bias_type][1]]["f1"] - results[BIAS_TYPES[args.bias_type][0]]["f1"]
+    results["overall"][f"{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_f1_diff"] = results[BIAS_TYPES[args.bias_type][0]]["f1"] - results[BIAS_TYPES[args.bias_type][1]]["f1"]
+    for i in range(args.num_labels):
+        for metric in ["tpr", "fpr", "tnr", "fnr"]:
+            results["overall"][f"class_{i}_{metric}"] = overall_metrics_dict[f"class_{i}"][metric]
+
+    for i in range(args.num_labels):
+        for metric in ["tpr", "fpr", "tnr", "fnr"]:
+            results["overall"][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_{metric}_diff"] = results[BIAS_TYPES[args.bias_type][1]][f"class_{i}_{metric}"] - results[BIAS_TYPES[args.bias_type][0]][f"class_{i}_{metric}"]
+            results["overall"][f"{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_class_{i}_{metric}_diff"] = results[BIAS_TYPES[args.bias_type][0]][f"class_{i}_{metric}"] - results[BIAS_TYPES[args.bias_type][1]][f"class_{i}_{metric}"]
+    
 
     
     if args.counterfactual:
         
         for group in BIAS_TYPES[args.bias_type]:
-            counterfactual_augmentation_accuracy, counterfactual_augmentation_f1, counterfactual_augmentation_tpr, counterfactual_augmentation_tnr, counterfactual_augmentation_fpr, counterfactual_augmentation_fnr = compute_metrics(all_labels_by_group[group], all_predictions_by_group[group], num_classes=args.num_labels)
-            results["overall"][f"counterfactually_augmented_{group}_accuracy"] = counterfactual_augmentation_accuracy
-            results["overall"][f"counterfactually_augmented_{group}_f1"] = counterfactual_augmentation_f1
-            results["overall"][f"counterfactually_augmented_{group}_tpr"] = counterfactual_augmentation_tpr
-            results["overall"][f"counterfactually_augmented_{group}_fpr"] = counterfactual_augmentation_fpr
-            results["overall"][f"counterfactually_augmented_{group}_tnr"] = counterfactual_augmentation_tnr
-            results["overall"][f"counterfactually_augmented_{group}_fnr"] = counterfactual_augmentation_fnr
+            counterfactual_group = BIAS_TYPES[args.bias_type][0] if group == BIAS_TYPES[args.bias_type][1] else BIAS_TYPES[args.bias_type][1]
+            counterfactually_augmented_metrics_dict = compute_metrics(results[group]["labels"]+results[counterfactual_group]["labels"], results[group]["predictions"]+results[counterfactual_group]["predictions"], num_classes=args.num_labels)
+            results["overall"][f"counterfactually_augmented_{group}_accuracy"] = counterfactually_augmented_metrics_dict["accuracy"]
+            results["overall"][f"counterfactually_augmented_{group}_f1"] = counterfactually_augmented_metrics_dict["f1"]
+            for i in range(args.num_labels):
+                for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                    results["overall"][f"counterfactually_augmented_{group}_class_{i}_{metric}"] = counterfactually_augmented_metrics_dict[f"class_{i}"][metric]
+                    results["overall"][f"counterfactually_augmented_{group}_to_{counterfactual_group}_class_{i}_{metric}_diff"] = counterfactually_augmented_metrics_dict[f"class_{i}"][metric] - results[group][f"class_{i}_{metric}"]                    
+            results["overall"][f"counterfactually_augmented_{group}_to_{counterfactual_group}_accuracy_diff"] = counterfactually_augmented_metrics_dict["accuracy"] - results[group]["accuracy"]
+            results["overall"][f"counterfactually_augmented_{group}_to_{counterfactual_group}_f1_diff"] = counterfactually_augmented_metrics_dict["f1"] - results[group]["f1"]
+            for i in range(args.num_labels):
+                for metric in ["tpr", "fpr", "tnr", "fnr"]:
+                    results["overall"][f"counterfactually_augmented_{group}_class_{i}_{metric}"] = counterfactually_augmented_metrics_dict[f"class_{i}"][metric]
+                    results["overall"][f"counterfactually_augmented_{group}_to_{counterfactual_group}_class_{i}_{metric}_diff"] = counterfactually_augmented_metrics_dict[f"class_{i}"][metric] - results[group][f"class_{i}_{metric}"]
         
-        for metric in ["accuracy", "f1", "tpr", "fpr", "tnr", "fnr"]:
-            results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_{metric}_diff"] = results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][1]}_{metric}"] - results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_{metric}"]
-            results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_{metric}_diff"] = results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_{metric}"] - results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][1]}_{metric}"]
+        
 
         results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_avg"] = np.mean(list(results[BIAS_TYPES[args.bias_type][0]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff"].values()) + list(results[BIAS_TYPES[args.bias_type][1]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff"].values()))
         results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_predicted_class_confidence_diff_avg"] = -results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_avg"]
         results["overall"]["counterfactually_augmented_predicted_class_confidence_diff_avg_abs"] = np.mean(np.concatenate([np.abs(list(results[BIAS_TYPES[args.bias_type][0]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff"].values())), np.abs(list(results[BIAS_TYPES[args.bias_type][1]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff"].values()))]))
-        #if args.num_labels == 2:
-        for i in range(args.num_labels):
+
+        for i in range(args.num_labels):           
             results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff_avg"] = np.mean(list(results[BIAS_TYPES[args.bias_type][0]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff"].values()) + list(results[BIAS_TYPES[args.bias_type][1]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff"].values()))
             results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][1]}_to_{BIAS_TYPES[args.bias_type][0]}_class_{i}_confidence_diff_avg"] = -results["overall"][f"counterfactually_augmented_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff_avg"]
             results["overall"][f"counterfactually_augmented_class_{i}_confidence_diff_avg_abs"] = np.mean(np.concatenate([np.abs(list(results[BIAS_TYPES[args.bias_type][0]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff"].values())), np.abs(list(results[BIAS_TYPES[args.bias_type][1]][f"counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_class_{i}_confidence_diff"].values()))]))
 
-        
-            
-    output_file = os.path.join(args.explanation_dir, f"fairness_{model_type}_{args.bias_type}_{args.split}_results.json") 
-
+    
     # drop positive_confidence_diff and predicted_confidence_diff for ease of visualization
-    # TODO: aggregate to directions, rather than social groups?
     for group in BIAS_TYPES[args.bias_type]:
         counterfactual_group = BIAS_TYPES[args.bias_type][0] if group == BIAS_TYPES[args.bias_type][1] else BIAS_TYPES[args.bias_type][1]
         results[f"{group}_counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff_list"] = results[group][f"counterfactual_{group}_to_{counterfactual_group}_predicted_class_confidence_diff"]
@@ -282,11 +207,10 @@ def main(args):
         if args.counterfactual:
             results[f"{group}_counterfactual_predictions"] = results[group]["counterfactual_predictions"]
             results[group].pop("counterfactual_predictions", None)
-            results[f"{group}_counterfactual_labels"] = results[group]["counterfactual_labels"]
-            results[group].pop("counterfactual_labels", None)
-        
 
-    # save results  
+
+    # save results          
+    output_file = os.path.join(args.explanation_dir, f"fairness_{model_type}_{args.bias_type}_{args.split}_results.json") 
     with open(output_file, 'w') as f:
         json.dump(results, f, indent=4)
 

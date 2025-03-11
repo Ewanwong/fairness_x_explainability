@@ -1,5 +1,5 @@
-from saliency_utils.pointing_game_utils import GridPointingGame
-from saliency_utils.Explainer import BcosExplainer, AttentionExplainer, GradientNPropabationExplainer, OcclusionExplainer, ShapleyValueExplainer, LimeExplainer
+from utils.pointing_game_utils import GridPointingGame
+from utils.Explainer import BcosExplainer, AttentionExplainer, GradientNPropabationExplainer, OcclusionExplainer, ShapleyValueExplainer, LimeExplainer
 from argparse import ArgumentParser
 import os
 

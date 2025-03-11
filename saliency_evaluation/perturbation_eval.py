@@ -4,7 +4,7 @@ from transformers import AutoTokenizer, AutoConfig
 from bcos_lm.models.modeling_bert import BertForSequenceClassification
 from bcos_lm.models.modeling_roberta import RobertaForSequenceClassification
 from bcos_lm.models.modeling_distilbert import DistilBertForSequenceClassification
-from saliency_utils.perturbation_utils import select_rationales, compute_comprehensiveness, compute_sufficiency, compute_perturbation_auc
+from utils.perturbation_utils import select_rationales, compute_comprehensiveness, compute_sufficiency, compute_perturbation_auc
 from argparse import ArgumentParser
 import json
 import random

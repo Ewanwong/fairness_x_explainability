@@ -6,51 +6,8 @@ import pandas as pd
 import argparse
 import scipy.stats
 import os
-
-FAIRNESS_ABS = False
-RELIANCE_ABS = False
-
-EXPLANATION_METHODS = ["Bcos",
-                       "Attention",
-                       "Saliency",
-                       "DeepLift",
-                       "GuidedBackprop",
-                       "InputXGradient",
-                       "IntegratedGradients",
-                       "SIG",
-                       "Occlusion",
-                       "KernelShap",
-                       "ShapleyValue",                       
-                       "Lime",
-                       "Decompx",]
-
-BIAS_TYPES = {
-    "gender": ["female", "male"],
-    "race": ["black", "white"],
-}
-
-def compute_reliance_score(sensitive_attribution, total_attribution, method="normalize"):
-    # method: raw, normalize
-        # TODO: make sure sensitive attribution scores are not empty
-    if len(sensitive_attribution) == 0:
-        return 0.0
-    
-    sensitive_attribution_scores = np.array([attribution_score[1] for attribution_score in sensitive_attribution])
-    total_attribution_scores = np.array([attribution_score[1] for attribution_score in total_attribution])
-    
-    # select the sensitive attribution score with the largest magnitude
-    sensitive_attribution_score =  sensitive_attribution_scores[np.argmax(np.abs(sensitive_attribution_scores))]
-    if method == "raw":
-        return sensitive_attribution_score
-    # TODO: consider length as well for normalization
-    elif method == "normalize":
-        #mean_total_attribution_magnitute = np.mean(total_attribution_scores)
-        norm_total_attribution_scores = np.linalg.norm(total_attribution_scores)
-
-        normalized_sensitive_attribution_score = sensitive_attribution_score / norm_total_attribution_scores
-        return normalized_sensitive_attribution_score
-    else:
-        raise ValueError("Method not recognized")
+from utils.utils import compute_reliance_score, compute_reliance_score_by_class_comparison
+from utils.utils import BIAS_TYPES, EXPLANATION_METHODS
 
 if __name__ == "__main__":
 
@@ -94,6 +51,7 @@ if __name__ == "__main__":
         if not os.path.exists(attribution_file):
             #print(f"File {sensitive_attribution_file} does not exist. Skipping...")
             continue
+        print("visualizing", method)
         with open(attribution_file) as f:
             attribution_data = json.load(f)
         aggregations = list(attribution_data.keys())
@@ -101,85 +59,42 @@ if __name__ == "__main__":
 
         for aggregation in aggregations:
 
+            visualization_data = {}
+            for group in BIAS_TYPES[args.bias_type]:
+                for i in range(args.num_labels):
+                    visualization_data[f"class_{i}_group_{group}_attribution"] = []
+                    visualization_data[f"class_{i}_group_{group}_fairness"] = []   
 
-            class_positive_race_black_attribution = []
-            class_positive_race_black_fairness = []
 
-            class_positive_race_white_attribution = []
-            class_positive_race_white_fairness = []
-
-            class_negative_race_black_attribution = []
-            class_negative_race_black_fairness = []
-
-            class_negative_race_white_attribution = []
-            class_negative_race_white_fairness = []
-
-    
-
-            with open(os.path.join(args.explanation_dir, f"{method}_{BIAS_TYPES[args.bias_type][0]}_{args.split}_sensitive_attribution.json")) as f:
-                black_attribution_data = json.load(f)[aggregation]
-            with open(os.path.join(args.explanation_dir, f"{method}_{BIAS_TYPES[args.bias_type][1]}_{args.split}_sensitive_attribution.json")) as f:
-                white_attribution_data = json.load(f)[aggregation]
-
-            black_predictions = fairness_data[f"{BIAS_TYPES[args.bias_type][0]}_predictions"]
-            white_predictions = fairness_data[f"{BIAS_TYPES[args.bias_type][1]}_predictions"]
-            black_counterfactual_predicted_class_confidence_diff = fairness_data[f"{BIAS_TYPES[args.bias_type][0]}_counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_list"].values()
-            white_counterfactual_predicted_class_confidence_diff = fairness_data[f"{BIAS_TYPES[args.bias_type][1]}_counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_list"].values()
-
-            black_sensitive_attributions = []
-            white_sensitive_attributions = []
-            for black_attribution in black_attribution_data.values():
-                sensitive_attribution = black_attribution["predicted_class"]
-                sensitive_reliance_score = compute_reliance_score(sensitive_attribution['sensitive_attribution'], sensitive_attribution['total_attribution'])
-                black_sensitive_attributions.append(sensitive_reliance_score)
+            all_data = {}
+            for group in BIAS_TYPES[args.bias_type]:
+                counterfactual_group = BIAS_TYPES[args.bias_type][1 - BIAS_TYPES[args.bias_type].index(group)]
+                
+                sensitive_reliances = []
+                with open(os.path.join(args.explanation_dir, f"{method}_{group}_{args.split}_sensitive_attribution.json")) as f:
+                    attribution_data = json.load(f)[aggregation]
+                for attribution in attribution_data.values():
+                    sensitive_attribution = attribution["predicted_class"]
+                    sensitive_reliance_score = compute_reliance_score(sensitive_attribution['sensitive_attribution'], sensitive_attribution['total_attribution'])
+                    sensitive_reliances.append(sensitive_reliance_score)
             
-            for white_attribution in white_attribution_data.values():
-                sensitive_attribution = white_attribution["predicted_class"]
-                sensitive_reliance_score = compute_reliance_score(sensitive_attribution['sensitive_attribution'], sensitive_attribution['total_attribution'])
-                white_sensitive_attributions.append(sensitive_reliance_score)
+                for prediction, counterfactual_predicted_class_confidence_diff, sensitive_reliance in zip(fairness_data[f"{group}_predictions"], fairness_data[f"{group}_counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_list"].values(), sensitive_reliances):
+                    
+                    visualization_data[f"class_{prediction}_group_{group}_attribution"].append(sensitive_reliance)
+                    visualization_data[f"class_{prediction}_group_{group}_fairness"].append(counterfactual_predicted_class_confidence_diff)
 
-            print(len(black_predictions), len(black_counterfactual_predicted_class_confidence_diff), len(black_sensitive_attributions))
-            for black_prediction, black_counterfactual_predicted_class_confidence_diff, black_sensitive_attribution in zip(black_predictions, black_counterfactual_predicted_class_confidence_diff, black_sensitive_attributions):
-                if black_prediction == 1:
-                    class_positive_race_black_fairness.append(black_counterfactual_predicted_class_confidence_diff)
-                    class_positive_race_black_attribution.append(black_sensitive_attribution)
-                else:
-                    class_negative_race_black_fairness.append(black_counterfactual_predicted_class_confidence_diff)
-                    class_negative_race_black_attribution.append(black_sensitive_attribution)
 
-            print(len(white_predictions), len(white_counterfactual_predicted_class_confidence_diff), len(white_sensitive_attributions))
-            for white_prediction, white_counterfactual_predicted_class_confidence_diff, white_sensitive_attribution in zip(white_predictions, white_counterfactual_predicted_class_confidence_diff, white_sensitive_attributions):
-                if white_prediction == 1:
-                    class_positive_race_white_fairness.append(white_counterfactual_predicted_class_confidence_diff)
-                    class_positive_race_white_attribution.append(white_sensitive_attribution)
-                else:
-                    class_negative_race_white_fairness.append(white_counterfactual_predicted_class_confidence_diff)
-                    class_negative_race_white_attribution.append(white_sensitive_attribution)
-            """
-            print(f"class positive, race {BIAS_TYPES[args.bias_type][0]}: correlation")
-            print(scipy.stats.pearsonr(class_positive_race_black_attribution, class_positive_race_black_fairness))
-            print(f"class positive, race {BIAS_TYPES[args.bias_type][1]}: correlation")
-            print(scipy.stats.pearsonr(class_positive_race_white_attribution, class_positive_race_white_fairness))
-            print(f"class negative, race {BIAS_TYPES[args.bias_type][0]}: correlation")
-            print(scipy.stats.pearsonr(class_negative_race_black_attribution, class_negative_race_black_fairness))
-            print(f"class negative, race {BIAS_TYPES[args.bias_type][1]}: correlation")
-            print(scipy.stats.pearsonr(class_negative_race_white_attribution, class_negative_race_white_fairness))    
-            print(f"class positive: correlation")
-            print(scipy.stats.pearsonr(class_positive_race_black_attribution+class_positive_race_white_attribution, class_positive_race_black_fairness+class_positive_race_white_fairness))
-            print(f"class negative: correlation")
-            print(scipy.stats.pearsonr(class_negative_race_black_attribution+class_negative_race_white_attribution, class_negative_race_black_fairness+class_negative_race_white_fairness))
-            print(f"race {BIAS_TYPES[args.bias_type][0]}: correlation")
-            print(scipy.stats.pearsonr(class_positive_race_black_attribution+class_negative_race_black_attribution, class_positive_race_black_fairness+class_negative_race_black_fairness))
-            print(f"race {BIAS_TYPES[args.bias_type][1]}: correlation")"
-            print(scipy.stats.pearsonr(class_positive_race_white_attribution+class_negative_race_white_attribution, class_positive_race_white_fairness+class_negative_race_white_fairness))
-            """
             for RELIANCE_ABS, FAIRNESS_ABS in [(False, False), (True, True)]:
-                all_attribution = class_positive_race_black_attribution + class_positive_race_white_attribution + class_negative_race_black_attribution + class_negative_race_white_attribution
-                all_fairness = class_positive_race_black_fairness + class_positive_race_white_fairness + class_negative_race_black_fairness + class_negative_race_white_fairness
-                """
-                print("all: correlation")
-                print(scipy.stats.pearsonr(all_attribution, all_fairness))
-                """
+                all_attribution = []
+                all_fairness = []
+                all_groups = []
+                for group in BIAS_TYPES[args.bias_type]:
+                    for i in range(args.num_labels):
+                        all_attribution += visualization_data[f"class_{i}_group_{group}_attribution"]
+                        all_fairness += visualization_data[f"class_{i}_group_{group}_fairness"]
+                        all_groups += [f'class_{i}_group_{group}']*len(visualization_data[f"class_{i}_group_{group}_attribution"])
+                #print(len(all_attribution), len(all_fairness), len(all_groups))
+                
                 if RELIANCE_ABS:
                     all_attribution = np.abs(all_attribution)
                 if FAIRNESS_ABS:
@@ -189,7 +104,7 @@ if __name__ == "__main__":
                 df = pd.DataFrame({
                 'sensitive_reliance': all_attribution,
                 f'{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_confidence_diff': all_fairness,
-                'group': [f'class positive, race {BIAS_TYPES[args.bias_type][0]}']*len(class_positive_race_black_attribution) + [f'class positive, race {BIAS_TYPES[args.bias_type][1]}']*len(class_positive_race_white_attribution) + [f'class negative, race {BIAS_TYPES[args.bias_type][0]}']*len(class_negative_race_black_attribution) + [f'class negative, race {BIAS_TYPES[args.bias_type][1]}']*len(class_negative_race_white_attribution)  # Group labels for color differentiation
+                'group': all_groups
                 })
 
                 # Plot using seaborn

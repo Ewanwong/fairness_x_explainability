@@ -14,82 +14,14 @@ import random
 from tqdm import tqdm
 import scipy.stats
 from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
-
+from utils.utils import compute_reliance_score, compute_reliance_score_by_class_comparison
+from utils.utils import EXPLANATION_METHODS, BIAS_TYPES
 
 FAIRNESS_ABS = True
 RELIANCE_ABS = True
 RELIANCE_KEYS = ["normalized", "normalized_by_class_comparison"]
 # RELIANCE_KEYS = ["raw", "normalized", "raw_by_class_comparison", "normalized_by_class_comparison"]
 
-
-EXPLANATION_METHODS = ["Bcos",
-                       "Attention",
-                       "Saliency",
-                       "DeepLift",
-                       "GuidedBackprop",
-                       "InputXGradient",
-                       "IntegratedGradients",
-                       "SIG",
-                       "Occlusion",
-                       "KernelShap",
-                       "ShapleyValue",                       
-                       "Lime",
-                       "Decompx",]
-
-
-BIAS_TYPES = {
-    "gender": ["female", "male"],
-    "race": ["black", "white"],
-}
-
-def compute_reliance_score(sensitive_attribution, total_attribution, method="normalize"):
-    # method: raw, normalize
-        # TODO: make sure sensitive attribution scores are not empty
-    if len(sensitive_attribution) == 0:
-        return 0.0
-    
-    sensitive_attribution_scores = np.array([attribution_score[1] for attribution_score in sensitive_attribution])
-    total_attribution_scores = np.array([attribution_score[1] for attribution_score in total_attribution])
-    
-    # select the sensitive attribution score with the largest magnitude
-    sensitive_attribution_score =  sensitive_attribution_scores[np.argmax(np.abs(sensitive_attribution_scores))]
-    if method == "raw":
-        return sensitive_attribution_score
-    # TODO: consider length as well for normalization
-    elif method == "normalize":
-        #mean_total_attribution_magnitute = np.mean(total_attribution_scores)
-        norm_total_attribution_scores = np.linalg.norm(total_attribution_scores)
-
-        normalized_sensitive_attribution_score = sensitive_attribution_score / norm_total_attribution_scores
-        return normalized_sensitive_attribution_score
-    else:
-        raise ValueError("Method not recognized")
-    
-def compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="normalize"):
-    # method: raw, normalize
-    sensitive_attribution_scores = [attribution_score[1] for attribution_score in sensitive_attribution]
-    other_sensitive_attribution_scores = [[attribution_score[1] for attribution_score in other_class_sensitive_attribution] for other_class_sensitive_attribution in other_class_sensitive_attributions]
-
-    # TODO: make sure sensitive attribution scores are not empty
-    if len(sensitive_attribution_scores) == 0 or 0 in [len(other_sensitive_attribution) for other_sensitive_attribution in other_class_sensitive_attributions]:
-        return 0.0
-    
-    total_attribution_scores = [attribution_score[1] for attribution_score in total_attribution]
-    other_total_attribution_scores = [[attribution_score[1] for attribution_score in other_class_total_attribution] for other_class_total_attribution in other_class_total_attributions]
-
-    # take the mean score for each instance across other classes
-    other_sensitive_attribution_scores = np.mean(other_sensitive_attribution_scores, axis=0)
-    other_total_attribution_scores = np.mean(other_total_attribution_scores, axis=0)
-
-    # compute the difference between the attribution score of the class of interest and the mean attribution score of the other classes
-    sensitive_attribution_scores_diff = np.array(sensitive_attribution_scores) - other_sensitive_attribution_scores
-    total_attribution_scores_diff = np.array(total_attribution_scores) - other_total_attribution_scores
-    sensitive_attribution_by_class_comparison = [[token, score] for token, score in zip(sensitive_attribution, sensitive_attribution_scores_diff)]
-    total_attribution_by_class_comparison = [[token, score] for token, score in zip(total_attribution, total_attribution_scores_diff)]
-
-    return compute_reliance_score(sensitive_attribution_by_class_comparison, total_attribution_by_class_comparison, method=method)
-
-    
 def compute_all_correlations(fairness_list, reliance_scores_dict, keys=RELIANCE_KEYS, fairness_abs=True, reliance_abs=True):
 
     correlation_results = {"confidence_diff": {}}
@@ -127,10 +59,13 @@ def main(args):
         model_type = "bcos"
     else:
         raise ValueError("Model type not recognized") 
-
-    # load fairness results
-    fairness_results = {}
     
+    if args.methods is not None:
+        methods = args.methods.strip().split(",")
+    else:
+        methods = EXPLANATION_METHODS
+
+    # load fairness results    
     fairness_file = os.path.join(args.explanation_dir, f"fairness_{model_type}_{args.bias_type}_{args.split}_results.json")
     if not os.path.exists(fairness_file):
         raise ValueError(f"File {fairness_file} does not exist")
@@ -138,10 +73,6 @@ def main(args):
     with open(fairness_file) as f:
         fairness_results = json.load(f)   
     
-    if args.methods is not None:
-        methods = args.methods.strip().split(",")
-    else:
-        methods = EXPLANATION_METHODS
 
     for method in methods:
         correlation_results = {}

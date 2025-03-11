@@ -6,65 +6,10 @@ import json
 import os
 import random
 from tqdm import tqdm
-from sklearn.metrics import accuracy_score, f1_score, confusion_matrix
+from utils.utils import filter_text
+from utils.utils import BIAS_TYPES, EXPLANATION_METHODS, SENSITIVE_TOKENS, SHOULD_CONTAIN, SHOULD_NOT_CONTAIN
 
-EXPLANATION_METHODS = ["Bcos",
-                       "Attention",
-                       "Saliency",
-                       "DeepLift",
-                       "GuidedBackprop",
-                       "InputXGradient",
-                       "IntegratedGradients",
-                       "SIG",
-                       "Occlusion",
-                       "KernelShap",
-                       "ShapleyValue",                       
-                       "Lime",
-                       "Decompx",]
-
-
-BIAS_TYPES = {
-    "gender": ["female", "male"],
-    "race": ["black", "white"],
-}
-
-
-SHOULD_CONTAIN = {
-    "white": ["white", "caucasian", "europe"], 
-    "black": ["black", "africa"],
-    "male": [],
-    "female": [],
-}
-
-SHOULD_NOT_CONTAIN = {
-    "white": [],
-    "black": ["nigg", "negro", "niger"],
-    "male": [],
-    "female": [],
-}
-
-SENSITIVE_TOKENS = {
-    "white": ["white", "europe", "caucasia"],
-    "black": ["black", "africa"],
-    "male": [],
-    "female": [],    
-}
-
-# TODO: a better filter function
-def filter_text(text, should_contain, should_not_contain):
-    contain_flag = False
-    for word in should_contain:
-        if word in text.lower():
-            contain_flag = True
-            break
-    if not contain_flag:
-        return False
-    for word in should_not_contain:
-        if word in text.lower():
-            return False
-    return True
-
-
+# TODO: a better way to extract sensitive token reliance
 def extract_sensitive_attributions(explanations, sensitive_tokens):
     results = {}
     for explanations in explanations:
