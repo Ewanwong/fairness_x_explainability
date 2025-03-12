@@ -115,5 +115,7 @@ if __name__ == "__main__":
                 plt.legend(title='Groups')
                 plt.show()
 
+                if not os.path.exists("visualization"):
+                    os.makedirs("visualization")
                 # save the plot
                 plt.savefig(f"visualization/{model_type}_{method}_{aggregation}_fairness_vs_reliance_fairness_abs_{FAIRNESS_ABS}_reliance_abs_{RELIANCE_ABS}.png")

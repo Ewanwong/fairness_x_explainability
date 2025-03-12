@@ -105,7 +105,11 @@ def main(args):
                                 sensitive_reliance_results[aggregation][group][f"class_{target_class}"][type][f"avg_abs_{reliance}"] = np.mean(np.abs(sensitive_reliance_results[aggregation][group][f"class_{target_class}"][type][reliance]))
                             else:
                                 sensitive_reliance_results[aggregation][group][f"class_{target_class}"][type][f"avg_{reliance}"] = 0.0
-        
+                    sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TP"]["TPR"] = sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TP"]["num_exsamples"] / (sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TP"]["num_exsamples"] + sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FN"]["num_exsamples"])
+                    sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FP"]["FPR"] = sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FP"]["num_exsamples"] / (sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FP"]["num_exsamples"] + sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TN"]["num_exsamples"])
+                    sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FN"]["FNR"] = sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FN"]["num_exsamples"] / (sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TP"]["num_exsamples"] + sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FN"]["num_exsamples"])
+                    sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TN"]["TNR"] = sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TN"]["num_exsamples"] / (sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["FP"]["num_exsamples"] + sensitive_reliance_results[aggregation][group][f"class_{target_class}"]["TN"]["num_exsamples"])
+
         for aggregation in aggregations:
             for target_class in range(args.num_labels):
                 for type in ["TP", "FP", "TN", "FN"]:
@@ -116,7 +120,11 @@ def main(args):
                             sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"][type][f"avg_abs_{reliance}"] = np.mean(np.abs(sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"][type][reliance]))
                         else:
                             sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"][type][f"avg_{reliance}"] = 0.0
-        
+
+                sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TP"]["TPR"] = sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TP"]["num_exsamples"] / (sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TP"]["num_exsamples"] + sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FN"]["num_exsamples"])
+                sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FP"]["FPR"] = sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FP"]["num_exsamples"] / (sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FP"]["num_exsamples"] + sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TN"]["num_exsamples"])
+                sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FN"]["FNR"] = sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FN"]["num_exsamples"] / (sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TP"]["num_exsamples"] + sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FN"]["num_exsamples"])
+                sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TN"]["TNR"] = sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TN"]["num_exsamples"] / (sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["FP"]["num_exsamples"] + sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"]["TN"]["num_exsamples"])
         # put the lists into a separate dictionary
         for aggregation in aggregations:
             sensitive_reliance_results[f"{aggregation}_list"] = {}
