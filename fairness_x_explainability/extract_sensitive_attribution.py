@@ -9,22 +9,7 @@ from tqdm import tqdm
 from utils.utils import filter_text
 from utils.utils import BIAS_TYPES, EXPLANATION_METHODS, SENSITIVE_TOKENS, SHOULD_CONTAIN, SHOULD_NOT_CONTAIN
 
-# TODO: a better way to extract sensitive token reliance
-def extract_sensitive_attributions(explanations, sensitive_tokens):
-    results = {}
-    for explanations in explanations:
-        index = explanations[0]["index"]
-        results[index] = {}
-        for target_class in range(len(explanations)):           
-            attribution_scores = explanations[target_class]["attribution"]
-            results[index][f"class_{target_class}"] = {"sensitive_attribution":[], "total_attribution":attribution_scores}
-            for attribution_score in attribution_scores:
-                for sensitive_token in sensitive_tokens:
-                    if sensitive_token in attribution_score[0]:
-                        results[index][f"class_{target_class}"]["sensitive_attribution"].append(attribution_score)
-                        
-        results[index][f"predicted_class"] = results[index][f"class_{explanations[0]['predicted_class']}"].copy()
-    return results
+
 
 def main(args):
 

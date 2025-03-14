@@ -48,21 +48,6 @@ SENSITIVE_TOKENS = {
     "female": [],    
 }
 
-# TODO: a better filter function
-def filter_text(text, should_contain, should_not_contain):
-    contain_flag = False
-    for word in should_contain:
-        if word in text.lower():
-            contain_flag = True
-            break
-    if not contain_flag:
-        return False
-    for word in should_not_contain:
-        if word in text.lower():
-            return False
-    return True
-
-# TODO: add support for multi-class error rate
 def compute_metrics(labels, predictions, num_classes=2):
     metrics_dict = {}
     
@@ -99,20 +84,6 @@ def compute_metrics(labels, predictions, num_classes=2):
     
     return metrics_dict
 
-# TODO: Implement perturbation functions
-def perturb_example(text, perturbation_list):
-    perturbed_text = text
-    for orig, perturb in perturbation_list:
-        perturbed_text = perturbed_text.replace(orig, perturb)
-    return perturbed_text
-
-def apply_dataset_perturbation(dataset, perturbation_list):
-    perturbed_dataset = dataset.copy()
-    perturbed_texts = []
-    for text in perturbed_dataset['text']:
-        perturbed_texts.append(perturb_example(text, perturbation_list))    
-    perturbed_dataset['text'] = perturbed_texts
-    return perturbed_dataset
 
 def compute_reliance_score(sensitive_attribution, total_attribution, method="normalize"):
     # method: raw, normalize
@@ -205,3 +176,48 @@ def batch_loader(dataset, batch_size, shuffle=False):
             yield batch
 
 
+# TODO: a better filter function
+def filter_text(text, should_contain, should_not_contain):
+    contain_flag = False
+    for word in should_contain:
+        if word in text.lower():
+            contain_flag = True
+            break
+    if not contain_flag:
+        return False
+    for word in should_not_contain:
+        if word in text.lower():
+            return False
+    return True
+
+# TODO: Implement perturbation functions
+def perturb_example(text, perturbation_list):
+    perturbed_text = text
+    for orig, perturb in perturbation_list:
+        perturbed_text = perturbed_text.replace(orig, perturb)
+    return perturbed_text
+
+def apply_dataset_perturbation(dataset, perturbation_list):
+    perturbed_dataset = dataset.copy()
+    perturbed_texts = []
+    for text in perturbed_dataset['text']:
+        perturbed_texts.append(perturb_example(text, perturbation_list))    
+    perturbed_dataset['text'] = perturbed_texts
+    return perturbed_dataset
+
+# TODO: a better way to extract sensitive token reliance
+def extract_sensitive_attributions(explanations, sensitive_tokens):
+    results = {}
+    for explanations in explanations:
+        index = explanations[0]["index"]
+        results[index] = {}
+        for target_class in range(len(explanations)):           
+            attribution_scores = explanations[target_class]["attribution"]
+            results[index][f"class_{target_class}"] = {"sensitive_attribution":[], "total_attribution":attribution_scores}
+            for attribution_score in attribution_scores:
+                for sensitive_token in sensitive_tokens:
+                    if sensitive_token in attribution_score[0]:
+                        results[index][f"class_{target_class}"]["sensitive_attribution"].append(attribution_score)
+                        
+        results[index][f"predicted_class"] = results[index][f"class_{explanations[0]['predicted_class']}"].copy()
+    return results
