@@ -92,7 +92,7 @@ def compute_reliance_score(sensitive_attribution, total_attribution, method="nor
         return 0.0
     
     sensitive_attribution_scores = np.array([attribution_score[1][0] for attribution_score in sensitive_attribution])
-    total_attribution_scores = np.array([attribution_score[1][0] for attribution_score in total_attribution])
+    total_attribution_scores = np.array([attribution_score[1] for attribution_score in total_attribution])
     
     # select the sensitive attribution score with the largest magnitude
     sensitive_attribution_score =  sensitive_attribution_scores[np.argmax(np.abs(sensitive_attribution_scores))]
@@ -223,7 +223,7 @@ def extract_sensitive_attributions(explanations, sensitive_tokens):
             for attribution_score in attribution_scores:
                 for sensitive_token in sensitive_tokens:
                     if sensitive_token in attribution_score[0]:
-                        results[index][f"class_{target_class}"]["sensitive_attribution"].append([attribution_score[0]], [attribution_score[1]])
+                        results[index][f"class_{target_class}"]["sensitive_attribution"].append([[attribution_score[0]], [attribution_score[1]]])
                         
         results[index][f"predicted_class"] = results[index][f"class_{explanations[0]['predicted_class']}"].copy()
     return results
