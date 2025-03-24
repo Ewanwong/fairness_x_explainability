@@ -6,7 +6,7 @@ import json
 import os
 import random
 from tqdm import tqdm
-from utils.utils import filter_text
+from utils.utils import filter_text, extract_sensitive_attributions
 from utils.utils import BIAS_TYPES, EXPLANATION_METHODS, SENSITIVE_TOKENS, SHOULD_CONTAIN, SHOULD_NOT_CONTAIN
 
 
@@ -17,7 +17,7 @@ def main(args):
         raise ValueError("Only binary bias types are supported")
     
     if args.methods is not None:
-        methods = args.methods.strip().split(",")
+        methods = args.methods.replace(' ', '').split(",")
     else:
         methods = EXPLANATION_METHODS
 

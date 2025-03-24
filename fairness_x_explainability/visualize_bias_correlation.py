@@ -19,6 +19,7 @@ if __name__ == "__main__":
     parser.add_argument('--methods', type=str, default=None, help='List of attribution methods to use separated by commas')
     parser.add_argument('--bias_type', type=str, default='race', help='Bias type to explain')
     parser.add_argument('--counterfactual', action='store_true', help='Apply counterfactual perturbation')
+    parser.add_argument('--normalization_factor', type=str, default='max', choices=["max", "std", "norm"], help='Normalization method for the attribution scores')
 
     args = parser.parse_args()
 
@@ -41,7 +42,7 @@ if __name__ == "__main__":
         fairness_data = json.load(f)  
 
     if args.methods is not None:
-        explanation_methods = args.methods.split(',')
+        explanation_methods = args.methods.replace(' ', '').split(",")
     else:
         explanation_methods = EXPLANATION_METHODS
 
@@ -75,7 +76,7 @@ if __name__ == "__main__":
                     attribution_data = json.load(f)[aggregation]
                 for attribution in attribution_data.values():
                     sensitive_attribution = attribution["predicted_class"]
-                    sensitive_reliance_score = compute_reliance_score(sensitive_attribution['sensitive_attribution'], sensitive_attribution['total_attribution'])
+                    sensitive_reliance_score = compute_reliance_score(sensitive_attribution['sensitive_attribution'], sensitive_attribution['total_attribution'], method="normalize", normalization_factor=args.normalization_factor)
                     sensitive_reliances.append(sensitive_reliance_score)
             
                 for prediction, counterfactual_predicted_class_confidence_diff, sensitive_reliance in zip(fairness_data[f"{group}_predictions"], fairness_data[f"{group}_counterfactual_{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_predicted_class_confidence_diff_list"].values(), sensitive_reliances):
@@ -115,7 +116,9 @@ if __name__ == "__main__":
                 plt.legend(title='Groups')
                 plt.show()
 
-                if not os.path.exists("visualization"):
-                    os.makedirs("visualization")
+                output_dir = f"visualization_division_by_{args.normalization_factor}"
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+
                 # save the plot
-                plt.savefig(f"visualization/{model_type}_{method}_{aggregation}_fairness_vs_reliance_fairness_abs_{FAIRNESS_ABS}_reliance_abs_{RELIANCE_ABS}.png")
+                plt.savefig(f"{output_dir}/{model_type}_{method}_{aggregation}_fairness_vs_reliance_fairness_abs_{FAIRNESS_ABS}_reliance_abs_{RELIANCE_ABS}.png")

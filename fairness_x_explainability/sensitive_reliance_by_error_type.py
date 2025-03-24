@@ -14,7 +14,7 @@ def main(args):
         raise ValueError("Only binary bias types are supported")
     
     if args.methods is not None:
-        methods = args.methods.strip().split(",")
+        methods = args.methods.replace(' ', '').split(",")
     else:
         methods = EXPLANATION_METHODS
 
@@ -60,10 +60,10 @@ def main(args):
                     total_attribution = attribution["predicted_class"]["total_attribution"]
                     other_class_sensitive_attributions = [attribution[f"class_{other_class}"]["sensitive_attribution"] for other_class in range(args.num_labels) if other_class != prediction]
                     other_class_total_attributions = [attribution[f"class_{other_class}"]["total_attribution"] for other_class in range(args.num_labels) if other_class != prediction]
-                    raw_reliance_score = compute_reliance_score(sensitive_attribution, total_attribution, method="raw")
-                    normalized_reliance_score = compute_reliance_score(sensitive_attribution, total_attribution, method="normalize")
-                    raw_class_comparison_reliance_score = compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="raw")
-                    normalized_class_comparison_reliance_score = compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="normalize")
+                    raw_reliance_score = compute_reliance_score(sensitive_attribution, total_attribution, method="raw", normalization_factor=args.normalization_factor)
+                    normalized_reliance_score = compute_reliance_score(sensitive_attribution, total_attribution, method="normalize", normalization_factor=args.normalization_factor)
+                    raw_class_comparison_reliance_score = compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="raw", normalization_factor=args.normalization_factor)
+                    normalized_class_comparison_reliance_score = compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="normalize", normalization_factor=args.normalization_factor)
                     reliance_dict = {"raw": raw_reliance_score, "normalized": normalized_reliance_score, "raw_by_class_comparison": raw_class_comparison_reliance_score, "normalized_by_class_comparison": normalized_class_comparison_reliance_score}
                     for target_class in range(args.num_labels):
                         if f"class_{target_class}" not in sensitive_reliance_results[aggregation][group]:
@@ -150,7 +150,7 @@ def main(args):
                         # remove the original lists                        
                         del sensitive_reliance_results[aggregation]["overall"][f"class_{target_class}"][type][reliance]
             
-        output_file = os.path.join(args.explanation_dir, f"{method}_{args.bias_type}_{args.split}_sensitive_reliance_by_error_type.json")
+        output_file = os.path.join(args.explanation_dir, f"{method}_{args.bias_type}_{args.split}_sensitive_reliance_by_error_type_division_by_{args.normalization_factor}.json")
         with open(output_file, "w") as f:   
             json.dump(sensitive_reliance_results, f, indent=4)
         print(f"Sensitive reliance results saved to {output_file}")
@@ -167,6 +167,6 @@ if __name__ == "__main__":
     parser.add_argument('--methods', type=str, default=None, help='List of attribution methods to use separated by commas')
     parser.add_argument('--bias_type', type=str, default='race', help='Bias type to explain')
     parser.add_argument('--counterfactual', action='store_true', help='Apply counterfactual perturbation')
-
+    parser.add_argument('--normalization_factor', type=str, default='max', choices=["max", "std", "norm"], help='Normalization method for the attribution scores')
     args = parser.parse_args()
     main(args)

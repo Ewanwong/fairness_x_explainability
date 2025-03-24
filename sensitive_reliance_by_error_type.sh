@@ -8,6 +8,7 @@ python -m fairness_x_explainability.sensitive_reliance_by_error_type \
     --bias_type="race" \
     --counterfactual \
     --methods "Bcos" \
+    --normalization_factor="norm" \
 
 python -m fairness_x_explainability.sensitive_reliance_by_error_type \
     --explanation_dir="/scratch/yifwang/fairness_x_explainability/results/baseline_bert_civil" \
@@ -16,3 +17,4 @@ python -m fairness_x_explainability.sensitive_reliance_by_error_type \
     --bias_type="race" \
     --counterfactual \
     --methods "Attention, Saliency, DeepLift, InputXGradient, IntegratedGradients, Occlusion" \
+    --normalization_factor="norm" \

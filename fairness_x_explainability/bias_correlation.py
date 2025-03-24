@@ -61,7 +61,7 @@ def main(args):
         raise ValueError("Model type not recognized") 
     
     if args.methods is not None:
-        methods = args.methods.strip().split(",")
+        methods = args.methods.replace(' ', '').split(",")
     else:
         methods = EXPLANATION_METHODS
 
@@ -167,10 +167,10 @@ def main(args):
                     other_class_total_attribution_results = [[other_class_total_attribution_results[i][j] for j in subset_indexes] for i in range(len(other_class_total_attribution_results))]
 
                     # compute reliance scores and correlations with different methods
-                    raw_reliance_scores = [compute_reliance_score(class_sensitive_attribution_result, class_total_attribution_result, method="raw") for class_sensitive_attribution_result, class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results)]
-                    normalized_reliance_scores = [compute_reliance_score(class_sensitive_attribution_result, class_total_attribution_result, method="normalize") for class_sensitive_attribution_result, class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results)]
-                    raw_reliance_scores_by_class_comparison = [compute_reliance_score_by_class_comparison(class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result, method="raw") for class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results, zip(*other_class_sensitive_attribution_results), zip(*other_class_total_attribution_results))]
-                    normalized_reliance_scores_by_class_comparison = [compute_reliance_score_by_class_comparison(class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result, method="normalize") for class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results, zip(*other_class_sensitive_attribution_results), zip(*other_class_total_attribution_results))]
+                    raw_reliance_scores = [compute_reliance_score(class_sensitive_attribution_result, class_total_attribution_result, method="raw", normalization_factor=args.normalization_factor) for class_sensitive_attribution_result, class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results)]
+                    normalized_reliance_scores = [compute_reliance_score(class_sensitive_attribution_result, class_total_attribution_result, method="normalize", normalization_factor=args.normalization_factor) for class_sensitive_attribution_result, class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results)]
+                    raw_reliance_scores_by_class_comparison = [compute_reliance_score_by_class_comparison(class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result, method="raw", normalization_factor=args.normalization_factor) for class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results, zip(*other_class_sensitive_attribution_results), zip(*other_class_total_attribution_results))]
+                    normalized_reliance_scores_by_class_comparison = [compute_reliance_score_by_class_comparison(class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result, method="normalize", normalization_factor=args.normalization_factor) for class_sensitive_attribution_result, class_total_attribution_result, other_class_sensitive_attribution_result, other_class_total_attribution_result in zip(class_sensitive_attribution_results, class_total_attribution_results, zip(*other_class_sensitive_attribution_results), zip(*other_class_total_attribution_results))]
                     reliance_scores_dict = {"raw": raw_reliance_scores, "normalized": normalized_reliance_scores, "raw_by_class_comparison": raw_reliance_scores_by_class_comparison, "normalized_by_class_comparison": normalized_reliance_scores_by_class_comparison}
                     correlation_output = compute_all_correlations(class_group_counterfactual_fairness_results, reliance_scores_dict, keys=reliance_keys, fairness_abs=FAIRNESS_ABS, reliance_abs=RELIANCE_ABS)
                     correlation_results[aggregation][group][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_confidence_change"][f"class_{target_class}"] = correlation_output["confidence_diff"]
@@ -203,8 +203,8 @@ def main(args):
                 predicted_class_sensitive_attribution_results = [attribution["predicted_class"]["sensitive_attribution"] for attribution in list(attribution_results.values())]
                 predicted_class_total_attribution_results = [attribution["predicted_class"]["total_attribution"] for attribution in list(attribution_results.values())]
 
-                raw_reliance_scores_predicted_class = [compute_reliance_score(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, method="raw") for predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result in zip(predicted_class_sensitive_attribution_results, predicted_class_total_attribution_results)]
-                normalized_reliance_scores_predicted_class = [compute_reliance_score(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, method="normalize") for predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result in zip(predicted_class_sensitive_attribution_results, predicted_class_total_attribution_results)]
+                raw_reliance_scores_predicted_class = [compute_reliance_score(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, method="raw", normalization_factor=args.normalization_factor) for predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result in zip(predicted_class_sensitive_attribution_results, predicted_class_total_attribution_results)]
+                normalized_reliance_scores_predicted_class = [compute_reliance_score(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, method="normalize", normalization_factor=args.normalization_factor) for predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result in zip(predicted_class_sensitive_attribution_results, predicted_class_total_attribution_results)]
                 predicted_classes = list(attribution_data["predicted_classes"].values())
                 raw_reliance_scores_by_class_comparison_predicted_class = []
                 normalized_reliance_scores_by_class_comparison_predicted_class = []
@@ -214,8 +214,8 @@ def main(args):
                     predicted_class_total_attribution_result = predicted_class_total_attribution_results[i]
                     other_class_sensitive_attribution_results = [sensitive_attribution_results_all_classes[j][i] for j in range(len(sensitive_attribution_results_all_classes)) if j != predicted_class]
                     other_class_total_attribution_results = [total_attribution_results_all_classes[j][i] for j in range(len(total_attribution_results_all_classes)) if j != predicted_class]
-                    raw_reliance_score_by_class_comparison_predicted_class = compute_reliance_score_by_class_comparison(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, other_class_sensitive_attribution_results, other_class_total_attribution_results, method="raw")
-                    normalized_reliance_score_by_class_comparison_predicted_class = compute_reliance_score_by_class_comparison(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, other_class_sensitive_attribution_results, other_class_total_attribution_results, method="normalize")
+                    raw_reliance_score_by_class_comparison_predicted_class = compute_reliance_score_by_class_comparison(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, other_class_sensitive_attribution_results, other_class_total_attribution_results, method="raw", normalization_factor=args.normalization_factor)
+                    normalized_reliance_score_by_class_comparison_predicted_class = compute_reliance_score_by_class_comparison(predicted_class_sensitive_attribution_result, predicted_class_total_attribution_result, other_class_sensitive_attribution_results, other_class_total_attribution_results, method="normalize", normalization_factor=args.normalization_factor)
                     raw_reliance_scores_by_class_comparison_predicted_class.append(raw_reliance_score_by_class_comparison_predicted_class)
                     normalized_reliance_scores_by_class_comparison_predicted_class.append(normalized_reliance_score_by_class_comparison_predicted_class)
                 
@@ -266,7 +266,7 @@ def main(args):
             correlation_results[aggregation]["overall"][f"{BIAS_TYPES[args.bias_type][0]}_to_{BIAS_TYPES[args.bias_type][1]}_abs_confidence_change"]["predicted_class"] = correlation_output["abs_confidence_diff"]
 
         
-        correlation_file = os.path.join(args.explanation_dir, f"correlation_{method}_{args.bias_type}_{args.split}_results.json")
+        correlation_file = os.path.join(args.explanation_dir, f"correlation_{method}_{args.bias_type}_{args.split}_division_by_{args.normalization_factor}_results.json")
         with open(correlation_file, "w") as f:
             json.dump(correlation_results, f, indent=4)
         
@@ -282,6 +282,7 @@ if __name__ == "__main__":
     parser.add_argument('--num_labels', type=int, default=2, help='Number of labels in the classification')
     parser.add_argument('--methods', type=str, default=None, help='List of attribution methods to use separated by commas')
     parser.add_argument('--bias_type', type=str, default='race', help='Bias type to explain')
+    parser.add_argument('--normalization_factor', type=str, default='max', choices=['max', 'std', 'norm'], help='Normalization method for the reliance score')
     #parser.add_argument('--counterfactual', action='store_true', help='Apply counterfactual perturbation')
 
     args = parser.parse_args()

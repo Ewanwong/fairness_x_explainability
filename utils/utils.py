@@ -85,7 +85,7 @@ def compute_metrics(labels, predictions, num_classes=2):
     return metrics_dict
 
 
-def compute_reliance_score(sensitive_attribution, total_attribution, method="normalize"):
+def compute_reliance_score(sensitive_attribution, total_attribution, method="normalize", normalization_factor="max"):
     # method: raw, normalize
         # TODO: make sure sensitive attribution scores are not empty
     if len(sensitive_attribution) == 0:
@@ -101,14 +101,20 @@ def compute_reliance_score(sensitive_attribution, total_attribution, method="nor
     # TODO: consider length as well for normalization
     elif method == "normalize":
         #mean_total_attribution_magnitute = np.mean(total_attribution_scores)
-        norm_total_attribution_scores = np.linalg.norm(total_attribution_scores)
-
-        normalized_sensitive_attribution_score = sensitive_attribution_score / norm_total_attribution_scores
+        if normalization_factor == "max":
+            scale_factor = np.max(np.abs(total_attribution_scores))
+        elif normalization_factor == "std":
+            scale_factor = np.std(total_attribution_scores)
+        elif normalization_factor == "norm":
+            scale_factor = np.linalg.norm(total_attribution_scores)
+        else:
+            raise ValueError("Normalization method not recognized")
+        normalized_sensitive_attribution_score = sensitive_attribution_score / scale_factor
         return normalized_sensitive_attribution_score
     else:
         raise ValueError("Method not recognized")
     
-def compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="normalize"):
+def compute_reliance_score_by_class_comparison(sensitive_attribution, total_attribution, other_class_sensitive_attributions, other_class_total_attributions, method="normalize", normalization_factor="max"):
     # method: raw, normalize
     sensitive_attribution_scores = [attribution_score[1] for attribution_score in sensitive_attribution]
     other_sensitive_attribution_scores = [[attribution_score[1] for attribution_score in other_class_sensitive_attribution] for other_class_sensitive_attribution in other_class_sensitive_attributions]
@@ -130,7 +136,7 @@ def compute_reliance_score_by_class_comparison(sensitive_attribution, total_attr
     sensitive_attribution_by_class_comparison = [[token, score] for token, score in zip(sensitive_attribution, sensitive_attribution_scores_diff)]
     total_attribution_by_class_comparison = [[token, score] for token, score in zip(total_attribution, total_attribution_scores_diff)]
 
-    return compute_reliance_score(sensitive_attribution_by_class_comparison, total_attribution_by_class_comparison, method=method)
+    return compute_reliance_score(sensitive_attribution_by_class_comparison, total_attribution_by_class_comparison, method=method, normalization_factor=normalization_factor)
 
 
 def set_random_seed(seed):
