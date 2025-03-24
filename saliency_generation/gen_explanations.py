@@ -216,7 +216,7 @@ def main(args):
             print(f"\nAttribution results saved to {output_file}")
 
             # TODO: apply counterfactual perturbation and explain
-            if args.counterfactual:
+            if args.counterfactual:  
                 if group == "black":
                     perturbation_list = [("black", "white"), ["african", "european"], ["africa", "europe"]]
                 elif group == "white":
